@@ -48,6 +48,7 @@ resources:
 jobs:
 
   - name: "Test"
+    public: true
     plan:
       - aggregate:
         - get: pybot
@@ -61,6 +62,7 @@ jobs:
         file: pybot/.concourse.yml
 
   - name: "Test PR"
+    public: true
     plan:
       - get: pybot-pull-request
         trigger: true
@@ -101,6 +103,7 @@ jobs:
             status: failure
 
   - name: "Build"
+    public: true
     plan:
       - get: pybot
         trigger: true
@@ -134,6 +137,7 @@ jobs:
 
             
   - name: "Deploy"
+    public: true
     plan:
       - get: docker-image
         trigger: true
