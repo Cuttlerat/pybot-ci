@@ -90,7 +90,7 @@ jobs:
                 pip -q install pytest
                 pip -q install -r requirements
                 cd bot
-                python -m pytest
+                python -m pytest --log-cli-level 1
         on_success:
           put: pybot-pull-request
           params:
