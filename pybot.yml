@@ -1,4 +1,9 @@
 resource_types:
+- name: pull-request
+  type: docker-image
+  source:
+    repository: jtarchie/pr
+
 - name: telegram-notification
   type: docker-image
   source:
@@ -6,6 +11,7 @@ resource_types:
     tag: latest
 
 resources:
+
 - name: docker-image
   type: docker-image
   source:
@@ -14,6 +20,15 @@ resources:
     password: ((registry_password))
     tag: latest
 
+- name: pybot-pull-request
+  type: pull-request
+  source:
+    repo: cuttlerat/pybot
+    access_token: ((access_token))
+    only_mergeable: true
+    ci_skip: true
+    private_key: ((pybot_private_key))
+    
 - name: pybot
   type: git
   source:
@@ -31,7 +46,8 @@ resources:
     command: "/build"
 
 jobs:
-  - name: "Build"
+
+  - name: "Test"
     plan:
       - aggregate:
         - get: pybot
@@ -41,6 +57,55 @@ jobs:
         - put: telegram
           params:
             message: "Build triggered"
+      - task: "Running tests"
+        file: pybot/.concourse.yml
+
+  - name: "Test PR"
+    plan:
+      - get: pybot-pull-request
+        trigger: true
+        on_success:
+          put: pybot-pull-request
+          params:
+            path: pybot-pull-request
+            status: pending
+      - task: "Running tests"
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: python
+              tag: 3.6-alpine
+          inputs:
+            - name: pybot-pull-request
+          run:
+            dir: pybot-pull-request
+            path: sh
+            args:
+              - -ec
+              - |
+                pip -q install pytest
+                pip -q install -r requirements
+                cd bot
+                python -m pytest
+        on_success:
+          put: pybot-pull-request
+          params:
+            path: pybot-pull-request
+            status: success
+        on_failure:
+          put: pybot-pull-request
+          params:
+            path: pybot-pull-request
+            status: failure
+
+  - name: "Build"
+    plan:
+      - get: pybot
+        trigger: true
+        passed:
+          - "Test"
       - aggregate:
         - task: "Get tag from commit hash"
           config:
@@ -60,15 +125,13 @@ jobs:
                 - -exc
                 - |
                   git rev-parse --short HEAD > ../tag/git_rev
-
-        - task: "Running tests"
-          file: pybot/.concourse.yml
       - put: docker-image
         params:
           build: pybot
           tag: tag/git_rev
           tag_as_latest: true
           dockerfile: pybot/dockerfile/pybot.Dockerfile
+
             
   - name: "Deploy"
     plan:
