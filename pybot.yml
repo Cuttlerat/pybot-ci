@@ -1,0 +1,122 @@
+resource_types:
+- name: telegram-notification
+  type: docker-image
+  source:
+    repository: cuttlerat/concourse-telegram-resource
+    tag: latest
+
+resources:
+- name: docker-image
+  type: docker-image
+  source:
+    repository: cuttlerat/pybot
+    username: ((registry_username))
+    password: ((registry_password))
+    tag: latest
+
+- name: pybot
+  type: git
+  source:
+    uri: git@github.com:cuttlerat/pybot.git
+    branch: master
+    private_key: ((pybot_private_key))
+
+- name: telegram
+  type: telegram-notification
+  source:
+    bot_token: ((telegram_token))
+    chat_id: ((telegram_chat_id))
+    ci_url: ((ci_url))
+    admins: ((telegram_admins))
+    command: "/build"
+
+jobs:
+  - name: "Build yoba"
+    plan:
+      - aggregate:
+        - get: pybot
+          trigger: true
+        - get: telegram
+          trigger: true
+        - put: telegram
+          params:
+            message: "ПОГНАЛИ БИЛДИТЬСЯ!"
+      - aggregate:
+        - task: "Get tag from commit hash"
+          config:
+            platform: linux
+            image_resource:
+              type: docker-image
+              source:
+                repository: alpine/git
+            inputs:
+              - name: pybot
+            outputs:
+              - name: tag
+            run:
+              dir: pybot
+              path: sh
+              args:
+                - -exc
+                - |
+                  git rev-parse --short HEAD > ../tag/git_rev
+
+        - task: "Running tests"
+          #file: pybot/.concourse.yml
+          config:
+            platform: linux
+            image_resource:
+              type: docker-image
+              source:
+                repository: python
+                tag: 3.6-alpine
+            inputs:
+              - name: pybot
+            run:
+              dir: pybot
+              path: sh
+              args:
+                - -exc
+                - |
+                  pip install pytest
+                  pip install -r requirements
+                  cd bot
+                  python -m pytest
+
+      - put: docker-image
+        params:
+          build: pybot
+          tag: tag/git_rev
+          tag_as_latest: true
+          dockerfile: pybot/dockerfile/pybot.Dockerfile
+            
+  - name: "Deploy"
+    plan:
+      - get: docker-image
+        trigger: true
+        params:
+          skip_download: true
+        passed:
+          - "Build yoba"
+      - task: "Send update to webhook"
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: "tutum/curl"
+              tag: "alpine"
+          run:
+            path: sh
+            args:
+              - -ec
+              - |
+                [[ "$(curl -s ((webhook)))" ]] && exit 1 || exit 0
+        on_failure:
+          put: telegram
+          params:
+            message: "YA NE SBILDILSO!"
+        on_success:
+          put: telegram
+          params:
+            message: "YA SBILDILSO!"
