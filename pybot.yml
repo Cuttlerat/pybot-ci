@@ -71,6 +71,9 @@ jobs:
           params:
             path: pybot-pull-request
             status: pending
+      - put: telegram
+        params:
+          message: "PR tests is triggered"
       - task: "Running tests"
         config:
           platform: linux
