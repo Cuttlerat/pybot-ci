@@ -38,12 +38,18 @@ resources:
 
 - name: telegram
   type: telegram-notification
-  source:
+  source: &telegram
     bot_token: ((telegram_token))
     chat_id: ((telegram_chat_id))
     ci_url: ((ci_url))
     admins: ((telegram_admins))
     command: "/build"
+
+- name: telegram-pr
+  type: telegram-notification
+  source:
+    <<: *telegram
+    command: "/merge"
 
 jobs:
 
@@ -104,6 +110,30 @@ jobs:
           params:
             path: pybot-pull-request
             status: failure
+
+  - name: "Merge PR"
+    public: true
+    plan:
+      - get: pybot-pull-request
+        passed:
+          - "Test PR"
+      - get: telegram-pr
+        trigger: true
+      - put: pybot-pull-request
+        params:
+          path: pybot-pull-request
+          status: success
+          merge:
+            method: "merge"
+        on_success:
+          put: telegram-pr
+          params:
+            message: "PR is merged"
+        on_failure:
+          put: telegram-pr
+          params:
+            message: "PR is not merged"
+    
 
   - name: "Build"
     public: true
