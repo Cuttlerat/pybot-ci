@@ -85,7 +85,8 @@ jobs:
               status: pending
         - put: telegram
           params:
-            message: "PR tests is triggered"
+            message: "PR {} tests is triggered"
+            message_file: pybot-pull-request/.git/id
       - task: "Copy concourse file to new branch"
         config:
           platform: linux
@@ -141,11 +142,13 @@ jobs:
         on_success:
           put: telegram-pr
           params:
-            message: "PR is merged"
+            message: "PR {} is merged"
+            message_file: pybot-pull-request/.git/id
         on_failure:
           put: telegram-pr
           params:
-            message: "PR is not merged"
+            message: "PR {} is not merged"
+            message_file: pybot-pull-request/.git/id
     
 
   - name: "Build"
