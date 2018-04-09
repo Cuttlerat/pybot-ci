@@ -49,6 +49,7 @@ resources:
   type: telegram-notification
   source:
     <<: *telegram
+    admins: ((telegram_pr_admins))
     command: "/merge"
 
 jobs:
@@ -66,40 +67,52 @@ jobs:
             message: "Build triggered"
       - task: "Running tests"
         file: pybot/.concourse.yml
+        params:
+          WEATHER_TOKEN: "((weather_token))"
+          TG_TOKEN: "((telegram_token))"
 
   - name: "Test PR"
     public: true
     plan:
-      - get: pybot-pull-request
-        trigger: true
-        on_success:
-          put: pybot-pull-request
+      - aggregate:
+        - get: pybot
+        - get: pybot-pull-request
+          trigger: true
+          on_success:
+            put: pybot-pull-request
+            params:
+              path: pybot-pull-request
+              status: pending
+        - put: telegram
           params:
-            path: pybot-pull-request
-            status: pending
-      - put: telegram
-        params:
-          message: "PR tests is triggered"
-      - task: "Running tests"
+            message: "PR tests is triggered"
+      - task: "Copy concourse file to new branch"
         config:
           platform: linux
           image_resource:
             type: docker-image
             source:
-              repository: python
-              tag: 3.6-alpine
+              repository: alpine
+              tag: 3.7
           inputs:
             - name: pybot-pull-request
+            - name: pybot
+          outputs:
+            - name: pybot-pr-tests
           run:
-            dir: pybot-pull-request
             path: sh
             args:
-              - -ec
+              - -exc
               - |
-                pip -q install pytest
-                pip -q install -r requirements
-                cd bot
-                python -m pytest --log-cli-level 1
+                cp -r pybot-pull-request/. pybot-pr-tests
+                cp pybot/.concourse.yml pybot-pr-tests
+                sed -i 's/pybot/pybot-pr-tests/' pybot-pr-tests/.concourse.yml
+
+      - task: "Running tests"
+        file: pybot-pr-tests/.concourse.yml
+        params:
+          WEATHER_TOKEN: "((weather_token))"
+          TG_TOKEN: "((telegram_token))"
         on_success:
           put: pybot-pull-request
           params:
