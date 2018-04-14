@@ -54,23 +54,6 @@ resources:
 
 jobs:
 
-  - name: "Test"
-    public: true
-    plan:
-      - aggregate:
-        - get: pybot
-          trigger: true
-        - get: telegram
-          trigger: true
-        - put: telegram
-          params:
-            message: "Build triggered"
-      - task: "Running tests"
-        file: pybot/.concourse.yml
-        params:
-          WEATHER_TOKEN: "((weather_token))"
-          TG_TOKEN: "((telegram_token))"
-
   - name: "Test PR"
     public: true
     plan:
@@ -83,10 +66,10 @@ jobs:
             params:
               path: pybot-pull-request
               status: pending
-        - put: telegram
-          params:
-            message: "PR {} tests is triggered"
-            message_file: pybot-pull-request/.git/id
+      - put: telegram
+        params:
+          message: "PR {} tests is triggered"
+          message_file: pybot-pull-request/.git/id
       - task: "Copy concourse file to new branch"
         config:
           platform: linux
@@ -154,10 +137,14 @@ jobs:
   - name: "Build"
     public: true
     plan:
-      - get: pybot
-        trigger: true
-        passed:
-          - "Test"
+      - aggregate:
+        - get: pybot
+          trigger: true
+        - get: telegram
+          trigger: true
+        - put: telegram
+          params:
+            message: "Build triggered"
       - aggregate:
         - task: "Get tag from commit hash"
           config:
