@@ -20,6 +20,14 @@ resources:
     password: ((registry_password))
     tag: latest
 
+- name: coverage-image
+  type: docker-image
+  source:
+    repository: cuttlerat/pybot-coverage
+    username: ((registry_username))
+    password: ((registry_password))
+    tag: latest
+
 - name: pybot-pull-request
   type: pull-request
   source:
@@ -107,6 +115,27 @@ jobs:
           params:
             path: pybot-pull-request
             status: failure
+      - put: coverage-image
+        params:
+          build: coverage
+          tag_as_latest: true
+          dockerfile: coverage/coverage.Dockerfile
+      - task: "Send update to coverage webhook"
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: "tutum/curl"
+              tag: "alpine"
+          run:
+            path: sh
+            args:
+              - -ec
+              - |
+                [[ "$(curl -s ((coverage_webhook)))" ]] && exit 1
+                echo "You can see tests coverage here: https://coverage.cuttlerat.ru"
+          
 
   - name: "Merge PR"
     public: true
